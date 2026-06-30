@@ -3,3 +3,5 @@ transformers
 numpy
 streamlit
 pillow
+torchvision
+opencv-python
