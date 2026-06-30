@@ -1,75 +1,124 @@
 import streamlit as st
 import numpy as np
-from PIL import Image
-import time
+import cv2
+
 from mlops.model_inference import RoadSegmenter
 
-#DUMMY MODEL INFERENCE
-def dummy_predict(tensor_input):
-    """
-    Expects input shape: (1, 3, 512, 512)
-    Returns a random binary mask of shape (512, 512)
-    """
 
-    
-    #random noise mask to simulate a road mask
-    random_mask = np.random.randint(0, 2, size=(512, 512)).astype(np.float32)
-    return random_mask
+# ----------------------------------------------------------
+# Load Model (Only Once)
+# ----------------------------------------------------------
+@st.cache_resource
+def load_model():
+    return RoadSegmenter(
+        checkpoint_path="mlops/models/best_model.pth"
+    )
 
-#STREAMLIT UI LAYOUT
-st.set_page_config(page_title="Road Extraction Inference", layout="wide")
+
+segmenter = load_model()
+
+
+# ----------------------------------------------------------
+# Streamlit Configuration
+# ----------------------------------------------------------
+st.set_page_config(
+    page_title="Road Extraction Inference",
+    layout="wide"
+)
 
 st.title("Occlusion-Robust Road Extraction")
-st.markdown("Upload a satellite image. The system will chunk it into a `3 x 512 x 512` tensor, run it through the Deep Learning model, and output the predicted road mask.")
 
-# File uploader accepts common image formats
-uploaded_file = st.file_uploader("Upload Satellite Imagery", type=["png", "jpg", "jpeg", "tif"])
+st.markdown(
+    """
+Upload a satellite image.
 
+The uploaded image is passed directly to the trained DeepLabV3 model,
+which predicts a binary road segmentation mask.
+"""
+)
+
+
+# ----------------------------------------------------------
+# Upload Image
+# ----------------------------------------------------------
+uploaded_file = st.file_uploader(
+    "Upload Satellite Image",
+    type=["png", "jpg", "jpeg", "tif", "tiff"]
+)
+
+
+# ----------------------------------------------------------
+# Inference
+# ----------------------------------------------------------
 if uploaded_file is not None:
-    # Read the image using PIL and ensure it's RGB
-    original_image = Image.open(uploaded_file).convert("RGB")
-    
+
+    file_bytes = np.asarray(
+        bytearray(uploaded_file.read()),
+        dtype=np.uint8
+    )
+
+    original_image = cv2.imdecode(
+        file_bytes,
+        cv2.IMREAD_COLOR
+    )
+
+    original_rgb = cv2.cvtColor(
+        original_image,
+        cv2.COLOR_BGR2RGB
+    )
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        st.subheader("Original Satellite Image")
-        st.image(original_image, use_column_width=True)
-        
-    # Inference Button
+
+        st.subheader("Original Image")
+
+        st.image(
+            original_rgb,
+            use_container_width=True
+        )
+
     if st.button("Run Extraction Model", type="primary"):
-        with st.spinner("Processing image tensor and running inference..."):
-            
-            # --- PREPROCESSING ---
-            # 1. Resize to 512x512
-            resized_image = original_image.resize((512, 512))
-            
-            # 2. Convert to numpy array: Shape becomes (512, 512, 3)
-            img_array = np.array(resized_image, dtype=np.float32)
-            
-            # Normalize just like in your training script (simplified here to 0-1)
-            img_array = img_array / 255.0 
-            
-            # 3. Transpose to PyTorch format: (Channels, Height, Width) -> (3, 512, 512)
-            tensor_input = np.transpose(img_array, (2, 0, 1))
-            
-            # 4. Add Batch Dimension: (1, 3, 512, 512)
-            batch_tensor = np.expand_dims(tensor_input, axis=0)
-            
-            # --- INFERENCE ---
-            # Pass the tensor to our model
-            predicted_mask = dummy_predict(batch_tensor)
-            
-            # --- POST-PROCESSING & DISPLAY ---
-            with col2:
-                st.subheader("Predicted Road Mask")
-                # Streamlit can render 2D numpy arrays directly if values are 0-1
-                st.image(predicted_mask, use_column_width=True, clamp=True)
-                
-                st.success("Inference Complete!")
-                
-                # Expandable section to prove to judges the tensor math is correct
-                with st.expander("View Tensor Metadata"):
-                    st.write(f"**Input Image Shape (RGB):** {img_array.shape}")
-                    st.write(f"**Model Input Tensor Shape:** {tensor_input.shape}")
-                    st.write(f"**Batched Input Shape:** {batch_tensor.shape}")
-                    st.write(f"**Output Mask Shape:** {predicted_mask.shape}")
+
+        with st.spinner("Running DeepLabV3 Inference..."):
+
+            predicted_mask = segmenter.predict(original_image)
+
+            overlay = segmenter.overlay(
+                original_image,
+                predicted_mask
+            )
+
+            overlay = cv2.cvtColor(
+                overlay,
+                cv2.COLOR_BGR2RGB
+            )
+
+        with col2:
+
+            st.subheader("Predicted Road Mask")
+
+            st.image(
+                predicted_mask,
+                use_container_width=True,
+                clamp=True
+            )
+
+            st.subheader("Road Overlay")
+
+            st.image(
+                overlay,
+                use_container_width=True
+            )
+
+            st.success("Inference Complete!")
+
+        with st.expander("Image Metadata"):
+
+            st.write(f"Original Image Shape : {original_image.shape}")
+
+            st.write(f"Predicted Mask Shape : {predicted_mask.shape}")
+
+            st.write("Model : DeepLabV3-ResNet50")
+
+            st.write(f"Device : {segmenter.device}")
