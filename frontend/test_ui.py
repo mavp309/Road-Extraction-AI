@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 import time
+from mlops.model_inference import RoadSegmenter
 
 #DUMMY MODEL INFERENCE
 def dummy_predict(tensor_input):
