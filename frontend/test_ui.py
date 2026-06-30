@@ -1,6 +1,14 @@
+import sys
+import os
+from pathlib import Path
+sys.path.append(os.path.abspath(os.path.join('.')))
 import streamlit as st
 import numpy as np
 import cv2
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from mlops.model_inference import RoadSegmenter
 
@@ -8,14 +16,24 @@ from mlops.model_inference import RoadSegmenter
 # ----------------------------------------------------------
 # Load Model (Only Once)
 # ----------------------------------------------------------
+MODEL_PATH = PROJECT_ROOT / "mlops" / "models" / "best_model.pth"
+
+
 @st.cache_resource
 def load_model():
-    return RoadSegmenter(
-        checkpoint_path="mlops/models/best_model.pth"
-    )
+    if not MODEL_PATH.exists():
+        raise FileNotFoundError(
+            f"Model checkpoint not found at {MODEL_PATH}"
+        )
+
+    return RoadSegmenter(checkpoint_path=str(MODEL_PATH))
 
 
-segmenter = load_model()
+try:
+    segmenter = load_model()
+except FileNotFoundError as exc:
+    segmenter = None
+    st.warning(str(exc))
 
 
 # ----------------------------------------------------------
@@ -80,45 +98,51 @@ if uploaded_file is not None:
 
     if st.button("Run Extraction Model", type="primary"):
 
-        with st.spinner("Running DeepLabV3 Inference..."):
-
-            predicted_mask = segmenter.predict(original_image)
-
-            overlay = segmenter.overlay(
-                original_image,
-                predicted_mask
+        if segmenter is None:
+            st.error(
+                "Model is not available. Please place the checkpoint at "
+                f"{MODEL_PATH}"
             )
+        else:
+            with st.spinner("Running DeepLabV3 Inference..."):
 
-            overlay = cv2.cvtColor(
-                overlay,
-                cv2.COLOR_BGR2RGB
-            )
+                predicted_mask = segmenter.predict(original_image)
 
-        with col2:
+                overlay = segmenter.overlay(
+                    original_image,
+                    predicted_mask
+                )
 
-            st.subheader("Predicted Road Mask")
+                overlay = cv2.cvtColor(
+                    overlay,
+                    cv2.COLOR_BGR2RGB
+                )
 
-            st.image(
-                predicted_mask,
-                use_container_width=True,
-                clamp=True
-            )
+            with col2:
 
-            st.subheader("Road Overlay")
+                st.subheader("Predicted Road Mask")
 
-            st.image(
-                overlay,
-                use_container_width=True
-            )
+                st.image(
+                    predicted_mask,
+                    use_container_width=True,
+                    clamp=True
+                )
 
-            st.success("Inference Complete!")
+                st.subheader("Road Overlay")
 
-        with st.expander("Image Metadata"):
+                st.image(
+                    overlay,
+                    use_container_width=True
+                )
 
-            st.write(f"Original Image Shape : {original_image.shape}")
+                st.success("Inference Complete!")
 
-            st.write(f"Predicted Mask Shape : {predicted_mask.shape}")
+                with st.expander("Image Metadata"):
 
-            st.write("Model : DeepLabV3-ResNet50")
+                    st.write(f"Original Image Shape : {original_image.shape}")
 
-            st.write(f"Device : {segmenter.device}")
+                    st.write(f"Predicted Mask Shape : {predicted_mask.shape}")
+
+                    st.write("Model : DeepLabV3-ResNet50")
+
+                    st.write(f"Device : {segmenter.device}")
