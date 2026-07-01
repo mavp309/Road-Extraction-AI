@@ -71,6 +71,8 @@ import cv2
 import os
 import numpy as np
 from pathlib import Path
+import sys
+sys.path.append(os.path.abspath(os.path.join('.', '..')))
 
 REPO_ROOT = Path(__file__).resolve().parent
 SAVED_MASK_PATH = REPO_ROOT / "frontend" / "saved_mask.png"
