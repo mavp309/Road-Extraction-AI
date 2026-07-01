@@ -131,20 +131,21 @@ def render_inference_tab():
                 save_mask_image(mask_image, MASK_SAVE_PATH)
                 st.session_state["saved_mask_path"] = str(MASK_SAVE_PATH)
                 st.success(f"Saved mask to {MASK_SAVE_PATH}")
-            with col3:
-                st.subheader("### Confidence Overlay")
-                if segmenter is not None:
-                    overlay = segmenter.overlay(image_bgr, prob_map)
-                    overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+    if segmenter is not None:
+
+        with col3:
+            st.subheader("### Confidence Overlay")
+            overlay = segmenter.overlay(image_bgr, prob_map)
+            overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
                # st.write(
-                    st.image(overlay, use_column_width=True)
-            with col4:
-                st.subheader("###Probability Heatmap") 
-                heatmap = np.clip(prob_map * 255.0, 0, 255).astype(np.uint8)
-                heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-                heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-                #st.write("### Probability Heatmap")
-                st.image(heatmap, use_column_width=True)
+            st.image(overlay, use_column_width=True)
+        with col4:
+            st.subheader("###Probability Heatmap") 
+            heatmap = np.clip(prob_map * 255.0, 0, 255).astype(np.uint8)
+            heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+            heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+               #st.write("### Probability Heatmap")
+            st.image(heatmap, use_column_width=True)
   
 
 def render_graph_construction_tab():
