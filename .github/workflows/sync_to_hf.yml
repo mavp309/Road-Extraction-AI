@@ -17,5 +17,4 @@ jobs:
       - name: Push entire repo to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        # TODO: Replace YOUR_HF_USERNAME and YOUR_SPACE_NAME below!
-        run: git push --force https://YOUR_HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/YOUR_HF_USERNAME/YOUR_SPACE_NAME main
+        run: git push --force https://mavp309@huggingface.co/spaces/mavp309/Road-Extraction-AI main
