@@ -67,6 +67,84 @@ import osmnx as ox
 import networkx as nx
 import random
 import pickle
+import cv2
+import os
+import numpy as np
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent
+SAVED_MASK_PATH = REPO_ROOT / "frontend" / "saved_mask.png"
+
+
+def load_saved_mask(mask_path=SAVED_MASK_PATH):
+    mask_path = Path(mask_path)
+    if not mask_path.exists():
+        raise FileNotFoundError(f"Saved mask not found at {mask_path}")
+
+    mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+    if mask is None:
+        raise ValueError(f"Unable to read saved mask from {mask_path}")
+
+    return (mask > 128).astype(np.uint8)
+
+
+def skeletonize_mask(mask):
+    mask_bin = (mask > 0).astype(np.uint8) * 255
+    skel = np.zeros(mask.shape, np.uint8)
+    element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+
+    while True:
+        eroded = cv2.erode(mask_bin, element)
+        temp = cv2.dilate(eroded, element)
+        temp = cv2.subtract(mask_bin, temp)
+        skel = cv2.bitwise_or(skel, temp)
+        mask_bin = eroded.copy()
+
+        if cv2.countNonZero(mask_bin) == 0:
+            break
+
+    return (skel > 0).astype(np.uint8)
+
+
+def mask_to_graph(mask, connectivity=8):
+    G = nx.Graph()
+    rows, cols = mask.shape
+    node_map = {}
+
+    for y in range(rows):
+        for x in range(cols):
+            if mask[y, x] > 0:
+                node_id = y * cols + x
+                node_map[(y, x)] = node_id
+                G.add_node(node_id, x=float(x), y=float(y))
+
+    if connectivity == 8:
+        neighbor_offsets = [
+            (-1, -1), (-1, 0), (-1, 1),
+            (0, -1),           (0, 1),
+            (1, -1),  (1, 0),  (1, 1),
+        ]
+    else:
+        neighbor_offsets = [(-1, 0), (0, -1), (0, 1), (1, 0)]
+
+    for (y, x), node_id in node_map.items():
+        for dy, dx in neighbor_offsets:
+            neighbor = (y + dy, x + dx)
+            if neighbor in node_map:
+                neighbor_id = node_map[neighbor]
+                if not G.has_edge(node_id, neighbor_id):
+                    distance = float(np.hypot(dx, dy))
+                    G.add_edge(node_id, neighbor_id, weight=distance, length=distance)
+
+    return G
+
+
+def build_graph_from_saved_mask(mask_path=SAVED_MASK_PATH):
+    mask = load_saved_mask(mask_path)
+    skeleton = skeletonize_mask(mask)
+    G = mask_to_graph(skeleton, connectivity=8)
+    print(f"Loaded saved mask from {mask_path}: {len(G.nodes)} skeleton nodes, {len(G.edges)} edges")
+    return G
 
 def get_real_but_broken_bengaluru_graph():
     print("Fetching real road network data from Bengaluru via OSMnx API...")
