@@ -17,4 +17,21 @@ jobs:
       - name: Push entire repo to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://mavp309:$HF_TOKEN@huggingface.co/spaces/mavp309/Road-Extraction-AI main
+        run: |          
+          # 1. Delete GitHub commit history to remove non-LFS large files
+          rm -rf .git
+          
+          # 2. Start a fresh git repository specifically for Hugging Face
+          git init
+          git checkout -b main
+          
+          # 3. Force Git LFS to track your model weights
+          git lfs install
+          git lfs track "*.pth"
+          
+          # 4. Commit the files cleanly using LFS
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions Bot"
+          git add .
+          git commit -m "Auto-sync from GitHub (with LFS enabled)" 
+          git push --force https://mavp309:$HF_TOKEN@huggingface.co/spaces/mavp309/Road-Extraction-AI main
