@@ -79,7 +79,7 @@ class RoadSegmenter:
         return tensor, original_size
 
     @torch.no_grad()
-    def predict(self, image):
+    def predict(self, image, as_probability: bool = False):
 
         tensor, original_size = self.preprocess(image)
 
@@ -89,9 +89,17 @@ class RoadSegmenter:
 
         probs = torch.sigmoid(logits)
 
-        mask = probs.squeeze().cpu().numpy()
+        prob = probs.squeeze().cpu().numpy()
 
-        mask = (mask > self.threshold).astype(np.uint8)
+        if as_probability:
+            prob_resized = cv2.resize(
+                prob,
+                (original_size[1], original_size[0]),
+                interpolation=cv2.INTER_LINEAR,
+            )
+            return prob_resized.astype(np.float32)
+
+        mask = (prob > self.threshold).astype(np.uint8)
 
         mask = cv2.resize(
             mask,
@@ -102,15 +110,24 @@ class RoadSegmenter:
         return mask
 
     def overlay(self, image, mask):
+        # Accept either a binary mask (0/1 or 0/255 uint8) or a
+        # probability map in [0,1]. Blend a green overlay according
+        # to per-pixel confidence.
+        img_f = image.astype(np.float32)
 
-        overlay = image.copy()
+        # Normalize mask to 0..1 float alpha
+        if mask.dtype == np.uint8:
+            alpha = mask.astype(np.float32) / 255.0 if mask.max() > 1 else mask.astype(np.float32)
+        else:
+            alpha = mask.astype(np.float32)
 
-        overlay[mask == 1] = (0, 255, 0)
+        if alpha.ndim == 2:
+            alpha = np.expand_dims(alpha, axis=2)
 
-        return cv2.addWeighted(
-            image,
-            0.7,
-            overlay,
-            0.3,
-            0,
-        )
+        color = np.array([0.0, 255.0, 0.0], dtype=np.float32)
+
+        tint_strength = 0.6
+
+        blended = img_f * (1.0 - tint_strength * alpha) + color * (tint_strength * alpha)
+
+        return blended.astype(np.uint8)

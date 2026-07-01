@@ -6,6 +6,28 @@ import streamlit as st
 import numpy as np
 import cv2
 
+# Small CSS tweak for hackathon look
+st.markdown(
+    """
+    <style>
+    .stApp { background-color: #0f1720; color: #e6eef8; }
+    .block-container { padding: 1rem 2rem; }
+    .stHeader { color: #ffffff; }
+    h1 { color: #ffffff; font-family: 'Inter', sans-serif; }
+    .stImage img { border-radius: 8px; }
+    .stSidebar { background-color: #071029; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Sidebar controls
+with st.sidebar:
+    st.header("Controls")
+    show_heatmap = st.checkbox("Show confidence heatmap", value=True)
+    threshold = st.slider("Binary threshold", 0.0, 1.0, 0.5, 0.01)
+    line_thickness = st.slider("Fallback line thickness", 2, 20, 6)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -152,31 +174,32 @@ if uploaded_file is not None:
         )
 
     if st.button("Run Extraction Model", type="primary"):
-
         with st.spinner("Running DeepLabV3 Inference..."):
             if segmenter is None:
                 st.info("Model is not available. Using a synthetic fallback road network.")
-                predicted_mask = create_fallback_road_mask(original_image)
-                overlay = create_fallback_overlay(original_image, predicted_mask)
+                prob_map = create_fallback_road_mask(original_image, thickness=line_thickness).astype(np.float32) / 255.0
                 model_name = "Fallback (synthetic road network)"
                 device_name = "cpu"
             else:
-                predicted_mask = segmenter.predict(original_image)
-                overlay = segmenter.overlay(
-                    original_image,
-                    predicted_mask
-                )
+                prob_map = segmenter.predict(original_image, as_probability=True)
                 model_name = "DeepLabV3-ResNet50"
                 device_name = segmenter.device
 
-            overlay = cv2.cvtColor(
-                overlay,
-                cv2.COLOR_BGR2RGB
-            )
+            # Binary mask based on slider
+            binary_mask = (prob_map > threshold).astype(np.uint8)
 
-            display_mask = predicted_mask
-            if display_mask.dtype == np.uint8 and display_mask.max() <= 1:
-                display_mask = (display_mask * 255).astype(np.uint8)
+            # Prepare display mask as uint8 0..255
+            display_mask = (binary_mask * 255).astype(np.uint8)
+
+            # Create overlay from probability map so tint follows confidence
+            overlay = create_fallback_overlay(original_image, prob_map if prob_map.dtype != np.uint8 else prob_map / 255.0)
+
+            overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+
+            # Heatmap (jet) for probability visualization
+            prob_uint8 = np.clip(prob_map * 255.0, 0, 255).astype(np.uint8)
+            heatmap = cv2.applyColorMap(prob_uint8, cv2.COLORMAP_JET)
+            heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
 
         with col2:
 
