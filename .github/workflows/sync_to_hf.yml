@@ -2,7 +2,7 @@ name: Sync to Hugging Face Hub
 
 on:
   push:
-    branches: [testui] # Runs every time you push to the 'main' branch
+    branches: [main] # Runs every time you push to the 'main' branch
   workflow_dispatch: # Allows you to run it manually from the Actions tab
 
 jobs:
