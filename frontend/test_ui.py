@@ -28,6 +28,13 @@ with st.sidebar:
     threshold = st.slider("Binary threshold", 0.0, 1.0, 0.5, 0.01)
     line_thickness = st.slider("Fallback line thickness", 2, 20, 6)
 
+# session state for storing latest probability map and metadata
+if "prob_map" not in st.session_state:
+    st.session_state["prob_map"] = None
+    st.session_state["model_name"] = None
+    st.session_state["device_name"] = None
+    st.session_state["last_upload_name"] = None
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -87,6 +94,16 @@ def create_fallback_overlay(image, mask):
     overlay = image.copy()
     overlay[mask > 0] = [0, 255, 0]
     return cv2.addWeighted(image, 0.7, overlay, 0.3, 0)
+
+
+def blend_overlay_from_prob(image, prob_map, tint=(0, 255, 0), tint_strength=0.6):
+    img_f = image.astype(np.float32)
+    alpha = prob_map.astype(np.float32)
+    if alpha.ndim == 2:
+        alpha = np.expand_dims(alpha, axis=2)
+    color = np.array(tint, dtype=np.float32)
+    blended = img_f * (1.0 - tint_strength * alpha) + color * (tint_strength * alpha)
+    return blended.astype(np.uint8)
 
 
 # ----------------------------------------------------------
@@ -162,6 +179,14 @@ if uploaded_file is not None:
         cv2.COLOR_BGR2RGB
     )
 
+    # If a new file was uploaded, clear any previous predictions
+    uploaded_name = getattr(uploaded_file, "name", None)
+    if st.session_state.get("last_upload_name") != uploaded_name:
+        st.session_state["prob_map"] = None
+        st.session_state["model_name"] = None
+        st.session_state["device_name"] = None
+        st.session_state["last_upload_name"] = uploaded_name
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -172,7 +197,6 @@ if uploaded_file is not None:
             original_rgb,
             use_container_width=True
         )
-
     if st.button("Run Extraction Model", type="primary"):
         with st.spinner("Running DeepLabV3 Inference..."):
             if segmenter is None:
@@ -185,38 +209,71 @@ if uploaded_file is not None:
                 model_name = "DeepLabV3-ResNet50"
                 device_name = segmenter.device
 
-            # Binary mask based on slider
-            binary_mask = (prob_map > threshold).astype(np.uint8)
+        # store results in session state so UI can react to threshold changes
+        st.session_state["prob_map"] = prob_map
+        st.session_state["model_name"] = model_name
+        st.session_state["device_name"] = device_name
 
-            # Prepare display mask as uint8 0..255
-            display_mask = (binary_mask * 255).astype(np.uint8)
+    # Render outputs whenever a prob_map is available (updates when threshold changes)
+    if st.session_state.get("prob_map") is not None:
+        prob_map = st.session_state["prob_map"]
 
-            # Create overlay from probability map so tint follows confidence
-            overlay = create_fallback_overlay(original_image, prob_map if prob_map.dtype != np.uint8 else prob_map / 255.0)
+        # If stored prob_map doesn't match the current image size, resize it
+        if prob_map is not None and prob_map.shape[0:2] != original_image.shape[0:2]:
+            prob_map = cv2.resize(
+                prob_map,
+                (original_image.shape[1], original_image.shape[0]),
+                interpolation=cv2.INTER_LINEAR,
+            ).astype(np.float32)
+            st.session_state["prob_map"] = prob_map
 
-            overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        # Binary mask based on slider
+        binary_mask = (prob_map > threshold).astype(np.uint8)
 
-            # Heatmap (jet) for probability visualization
-            prob_uint8 = np.clip(prob_map * 255.0, 0, 255).astype(np.uint8)
-            heatmap = cv2.applyColorMap(prob_uint8, cv2.COLORMAP_JET)
-            heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+        # Prepare display mask as uint8 0..255
+        display_mask = (binary_mask * 255).astype(np.uint8)
+
+        # Create overlay from probability map so tint follows confidence
+        if segmenter is None:
+            overlay = blend_overlay_from_prob(original_image, prob_map, tint=(0, 255, 0), tint_strength=0.6)
+        else:
+            # ensure prob_map matches image size before passing to segmenter.overlay
+            overlay = segmenter.overlay(original_image, prob_map)
+
+        overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+
+        # Heatmap (jet) for probability visualization
+        prob_uint8 = np.clip(prob_map * 255.0, 0, 255).astype(np.uint8)
+        heatmap = cv2.applyColorMap(prob_uint8, cv2.COLORMAP_JET)
+        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+
+        # Resize overlay, heatmap and mask to match the uploaded image size
+        target_w, target_h = original_rgb.shape[1], original_rgb.shape[0]
+        overlay_resized = cv2.resize(overlay, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+        heatmap_resized = cv2.resize(heatmap, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+        display_mask_resized = cv2.resize(display_mask, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
 
         with col2:
 
             st.subheader("Predicted Road Mask")
 
             st.image(
-                display_mask,
+                display_mask_resized,
                 use_container_width=True,
                 clamp=True
             )
 
-            st.subheader("Road Overlay")
+            # Show overlay to the left of the heatmap with matching sizes
+            overlay_col, heatmap_col = st.columns([1, 1])
 
-            st.image(
-                overlay,
-                use_container_width=True
-            )
+            with overlay_col:
+                st.subheader("Road Overlay")
+                st.image(overlay_resized, use_container_width=True)
+
+            with heatmap_col:
+                if show_heatmap:
+                    st.subheader("Confidence Heatmap")
+                    st.image(heatmap_resized, use_container_width=True)
 
             st.success("Inference Complete!")
 
@@ -224,8 +281,11 @@ if uploaded_file is not None:
 
                 st.write(f"Original Image Shape : {original_image.shape}")
 
-                st.write(f"Predicted Mask Shape : {predicted_mask.shape}")
+                st.write(f"Predicted Mask Shape : {display_mask_resized.shape}")
 
-                st.write(f"Model : {model_name}")
+                st.write(f"Model : {st.session_state.get('model_name')}")
 
-                st.write(f"Device : {device_name}")
+                st.write(f"Device : {st.session_state.get('device_name')}")
+    else:
+        with col2:
+            st.info("Click 'Run Extraction Model' to compute a prediction (then adjust threshold live).")
