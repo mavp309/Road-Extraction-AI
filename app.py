@@ -10,6 +10,12 @@ from frontend.sidebar import render_sidebar
 from mlops.model_inference import RoadSegmenter
 from graphs.graph import build_graph_from_saved_mask
 from graphs.heal import heal_topological_gaps
+from graphs.simulation import (
+    build_flood_metrics,
+    get_node_positions,
+    identify_choke_points,
+    simulate_flood,
+)
 
 # ----------------------------------------------------------
 # Project paths
@@ -230,7 +236,93 @@ def render_healing_tab():
         )
 
 
-tab1, tab2, tab3 = st.tabs(["1. Inference", "2. Graph Construction", "3. Topology Healing"])
+def render_simulation_tab():
+    st.header("Interactive Flood Simulation")
+
+    graph = st.session_state.get("G_healed") or st.session_state.get("G_mask")
+    if graph is None:
+        st.info("Please generate a graph first in Steps 2 or 3.")
+        return
+
+    col_left, col_right = st.columns([1, 2])
+    with col_left:
+        st.write("### Simulation Controls")
+        seed_nodes_input = st.text_input(
+            "Seed nodes (comma separated)",
+            value="0",
+            help="Provide one or more node IDs from the graph to start the flood."
+        )
+        steps = st.slider("Simulation steps", min_value=1, max_value=10, value=5)
+        spread_probability = st.slider("Spread probability", min_value=0.1, max_value=1.0, value=0.7, step=0.1)
+        if st.button("Run Simulation", type="primary"):
+            with st.spinner("Simulating flood propagation..."):
+                try:
+                    seed_nodes = [int(item.strip()) for item in seed_nodes_input.split(",") if item.strip()]
+                except ValueError:
+                    st.error("Seed nodes must be integers separated by commas.")
+                    return
+
+                result = simulate_flood(
+                    graph,
+                    seed_nodes=seed_nodes,
+                    steps=steps,
+                    spread_probability=spread_probability,
+                    random_seed=42,
+                )
+                metrics = build_flood_metrics(graph, set(result["flooded_nodes"]), set(result["flooded_edges"]))
+                choke_points = identify_choke_points(graph, top_n=5)
+                st.session_state["flood_result"] = result
+                st.session_state["flood_metrics"] = metrics
+                st.session_state["choke_points"] = choke_points
+                st.success("Simulation complete.")
+
+    with col_right:
+        if st.session_state.get("flood_result") is None:
+            st.info("Run a simulation to visualize flood spread and chokepoints.")
+            return
+
+        result = st.session_state["flood_result"]
+        metrics = st.session_state["flood_metrics"]
+        choke_points = st.session_state["choke_points"]
+        pos = get_node_positions(graph)
+
+        flooded_nodes = set(result["flooded_nodes"])
+        flooded_edges = set(result["flooded_edges"])
+
+        fig, ax = plt.subplots(figsize=(7, 7))
+        nx.draw_networkx_edges(graph, pos, edge_color="#4b5563", width=0.8, alpha=0.6, ax=ax)
+        nx.draw_networkx_edges(
+            graph,
+            pos,
+            edgelist=[(u, v) for (u, v) in graph.edges() if (min(u, v), max(u, v)) in flooded_edges],
+            edge_color="#ef4444",
+            width=2.2,
+            alpha=0.95,
+            ax=ax,
+        )
+        nx.draw_networkx_nodes(graph, pos, nodelist=list(graph.nodes()), node_color="#94a3b8", node_size=20, alpha=0.7, ax=ax)
+        nx.draw_networkx_nodes(graph, pos, nodelist=list(flooded_nodes), node_color="#ef4444", node_size=35, alpha=0.95, ax=ax)
+        ax.set_title("Flood propagation on road network", color="white")
+        ax.set_facecolor("#111827")
+        fig.tight_layout()
+        st.pyplot(fig)
+
+        st.write("### Flood Summary")
+        st.metric("Flooded nodes", metrics["flooded_nodes"])
+        st.metric("Flooded edges", metrics["flooded_edges"])
+        st.metric("Flood coverage", f"{metrics['flooded_fraction_nodes'] * 100:.1f}%")
+
+        st.write("### Choke Points")
+        if choke_points:
+            betweenness = nx.betweenness_centrality(graph, weight="weight", normalized=True)
+            for node, score in choke_points:
+                degree = graph.degree(node)
+                st.write(f"- {node}: degree {degree}, centrality {betweenness[node]:.2f}, score {score:.2f}")
+        else:
+            st.info("No choke points detected.")
+
+
+tab1, tab2, tab3, tab4 = st.tabs(["1. Inference", "2. Graph Construction", "3. Topology Healing", "4. Flood Simulation"])
 
 with tab1:
     render_inference_tab()
@@ -240,3 +332,6 @@ with tab2:
 
 with tab3:
     render_healing_tab()
+
+with tab4:
+    render_simulation_tab()
