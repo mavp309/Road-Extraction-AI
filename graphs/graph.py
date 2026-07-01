@@ -73,8 +73,9 @@ import numpy as np
 from pathlib import Path
 import sys
 sys.path.append(os.path.abspath(os.path.join('.', '..')))
-
-REPO_ROOT = Path(__file__).resolve().parent
+from .mask_processing import load_and_prepare
+from .topology import build_topological_graph, prune_spurs
+REPO_ROOT = Path(__file__).resolve().parent.parent
 SAVED_MASK_PATH = REPO_ROOT / "frontend" / "saved_mask.png"
 
 
@@ -141,11 +142,18 @@ def mask_to_graph(mask, connectivity=8):
     return G
 
 
-def build_graph_from_saved_mask(mask_path=SAVED_MASK_PATH):
-    mask = load_saved_mask(mask_path)
-    skeleton = skeletonize_mask(mask)
-    G = mask_to_graph(skeleton, connectivity=8)
-    print(f"Loaded saved mask from {mask_path}: {len(G.nodes)} skeleton nodes, {len(G.edges)} edges")
+def build_graph_from_saved_mask(mask_path=SAVED_MASK_PATH, min_spur_length=15.0):
+    mask_path = Path(mask_path)
+    prepared = load_and_prepare(mask_path)
+    G = build_topological_graph(prepared["skeleton"])
+
+    if len(G.nodes) == 0:
+        mask = prepared["mask"]
+        G = mask_to_graph(mask, connectivity=8)
+    elif min_spur_length:
+        G = prune_spurs(G, min_length=min_spur_length)
+
+    print(f"Loaded saved mask from {mask_path}: {len(G.nodes)} graph nodes, {len(G.edges)} graph edges")
     return G
 
 def get_real_but_broken_bengaluru_graph():

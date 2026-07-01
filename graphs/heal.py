@@ -13,6 +13,16 @@ sys.path.append(os.path.abspath(os.path.join('.', '..')))
 # 1. GRAPH LOADING
 # ─────────────────────────────────────────────
 
+def build_bridge_geometry(G, u, v, points=20):
+    """Create a simple polyline geometry for a healed bridge edge."""
+    ux, uy = G.nodes[u]["x"], G.nodes[u]["y"]
+    vx, vy = G.nodes[v]["x"], G.nodes[v]["y"]
+
+    xs = np.linspace(ux, vx, points)
+    ys = np.linspace(uy, vy, points)
+    return [(float(x), float(y)) for x, y in zip(xs, ys)]
+
+
 def load_and_project_graph(filepath):
     with open(filepath, "rb") as f:
         G = pickle.load(f)
@@ -183,8 +193,16 @@ def recover_interior_edges(G_healed, max_dist=175, alignment_thresh=0.50):
             continue
         if u in used or v in used:
             continue
-        G_healed.add_edge(u, v, weight=dist, length=dist,
-                          healed=True, alignment=alignment)
+        geometry = build_bridge_geometry(G_healed, u, v)
+        G_healed.add_edge(
+            u,
+            v,
+            weight=dist,
+            length=dist,
+            healed=True,
+            alignment=alignment,
+            geometry=geometry,
+        )
         used.add(u)
         used.add(v)
         added += 1
@@ -295,8 +313,16 @@ def heal_topological_gaps(G, max_dist_meters=400, min_alignment=0.30, max_passes
         healed_this_pass = 0
         for u, v, dist, alignment in candidate_edges:
             if not nx.has_path(G_healed, u, v):
-                G_healed.add_edge(u, v, weight=dist, length=dist,
-                                  healed=True, alignment=alignment)
+                geometry = build_bridge_geometry(G_healed, u, v)
+                G_healed.add_edge(
+                    u,
+                    v,
+                    weight=dist,
+                    length=dist,
+                    healed=True,
+                    alignment=alignment,
+                    geometry=geometry,
+                )
                 healed_this_pass += 1
 
         total_healed += healed_this_pass
@@ -401,8 +427,16 @@ def heal_topological_gaps(G, max_dist_meters=400, min_alignment=0.30, max_passes
                 continue
             if u in connected_this_sweep or v in connected_this_sweep:
                 continue
-            G_healed.add_edge(u, v, weight=dist, length=dist,
-                               healed=True, alignment=alignment)
+            geometry = build_bridge_geometry(G_healed, u, v)
+            G_healed.add_edge(
+                u,
+                v,
+                weight=dist,
+                length=dist,
+                healed=True,
+                alignment=alignment,
+                geometry=geometry,
+            )
             connected_this_sweep.add(u)
             connected_this_sweep.add(v)
             added_this_sweep += 1
