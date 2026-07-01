@@ -10,7 +10,10 @@ def init_session_state():
         "saved_mask_path": None,
         "G_mask": None,
         "G_healed": None,
-        "image": None, # Store the uploaded image
+        "image": None,
+        "flood_result": None,
+        "flood_metrics": None,
+        "choke_points": None,
     }
     
     for key, default_value in default_states.items():
