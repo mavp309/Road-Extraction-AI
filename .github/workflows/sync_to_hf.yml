@@ -28,6 +28,9 @@ jobs:
           # 3. Force Git LFS to track your model weights
           git lfs install
           git lfs track "*.pth"
+          git lfs track "*.png"
+          git lfs track "*.jpg"
+          git lfs track "*.jpeg"
           
           # 4. Commit the files cleanly using LFS
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
