@@ -101,7 +101,7 @@ def render_inference_tab():
         st.info("Upload an image to start.")
         return
 
-    col1, col2 = st.columns(2)
+    col1, col2,col3,col4 = st.columns(4)
     with col1:
         st.subheader("Original Image")
         st.image(st.session_state["image"], use_column_width=True)
@@ -118,7 +118,7 @@ def render_inference_tab():
                     prob_map = segmenter.predict(image_bgr, as_probability=True)
                 st.session_state["prob_map"] = prob_map
                 st.success("Inference complete.")
-
+        st.subheader("Probability Map")
         if st.session_state.get("prob_map") is not None:
             prob_map = st.session_state["prob_map"]
             mask_image = prob_map_to_mask_image(prob_map, config["threshold"])
@@ -131,19 +131,21 @@ def render_inference_tab():
                 save_mask_image(mask_image, MASK_SAVE_PATH)
                 st.session_state["saved_mask_path"] = str(MASK_SAVE_PATH)
                 st.success(f"Saved mask to {MASK_SAVE_PATH}")
-
-            if segmenter is not None:
-                overlay = segmenter.overlay(image_bgr, prob_map)
-                overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
-                st.write("### Confidence Overlay")
-                st.image(overlay, use_column_width=True)
-
+            with col3:
+                st.subheader("### Confidence Overlay")
+                if segmenter is not None:
+                    overlay = segmenter.overlay(image_bgr, prob_map)
+                    overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+               # st.write(
+                    st.image(overlay, use_column_width=True)
+            with col4:
+                st.subheader("###Probability Heatmap") 
                 heatmap = np.clip(prob_map * 255.0, 0, 255).astype(np.uint8)
                 heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
                 heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-                st.write("### Probability Heatmap")
+                #st.write("### Probability Heatmap")
                 st.image(heatmap, use_column_width=True)
-
+  
 
 def render_graph_construction_tab():
     st.header("Mask-Derived Graph")
