@@ -101,50 +101,40 @@ def render_inference_tab():
         st.info("Upload an image to start.")
         return
 
-    col1, col2,col3,col4 = st.columns(4)
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        st.subheader("Original Image")
+        st.write("### Original Image")
         st.image(st.session_state["image"], use_column_width=True)
 
     with col2:
-        st.subheader("Inference")
-        if st.button("Run Inference", type="primary"):
-            with st.spinner("Processing inference..."):
-                image_bgr = cv2.cvtColor(st.session_state["image"], cv2.COLOR_RGB2BGR)
-                if segmenter is None:
-                    st.warning("Model checkpoint not found. Using fallback synthetic mask.")
-                    prob_map = np.zeros((st.session_state["image"].shape[0], st.session_state["image"].shape[1]), dtype=np.float32)
-                else:
-                    prob_map = segmenter.predict(image_bgr, as_probability=True)
-                st.session_state["prob_map"] = prob_map
-                st.success("Inference complete.")
-        st.subheader("Probability Map")
-        if st.session_state.get("prob_map") is not None:
-            prob_map = st.session_state["prob_map"]
-            mask_image = prob_map_to_mask_image(prob_map, config["threshold"])
-            st.session_state["mask_image"] = mask_image
-
-            st.write("### Mask Preview")
-            st.image(mask_image, clamp=True, use_column_width=True)
-
-            if st.button("Save mask for graph construction"):
-                save_mask_image(mask_image, MASK_SAVE_PATH)
+        st.write("### Mask Preview")
+        if st.session_state.get("mask_image") is not None:
+            st.image(st.session_state["mask_image"], clamp=True, use_column_width=True)
+            
+            if st.button("Save mask for graph"):
+                save_mask_image(st.session_state["mask_image"], MASK_SAVE_PATH)
                 st.session_state["saved_mask_path"] = str(MASK_SAVE_PATH)
-                st.success(f"Saved mask to {MASK_SAVE_PATH}")
-    if segmenter is not None:
+                st.success(f"Saved to {MASK_SAVE_PATH}")
+        else:
+            st.info("Click 'Run Inference' above.")
 
-        with col3:
-            st.subheader("### Confidence Overlay")
+    with col3:
+        st.write("### Confidence Overlay")
+        if st.session_state.get("prob_map") is not None and segmenter is not None:
+            prob_map = st.session_state["prob_map"]
+            image_bgr = cv2.cvtColor(st.session_state["image"], cv2.COLOR_RGB2BGR)
             overlay = segmenter.overlay(image_bgr, prob_map)
             overlay = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
-               # st.write(
             st.image(overlay, use_column_width=True)
-        with col4:
-            st.subheader("###Probability Heatmap") 
+
+    with col4:
+        st.write("### Probability Heatmap")
+        if st.session_state.get("prob_map") is not None:
+            prob_map = st.session_state["prob_map"]
             heatmap = np.clip(prob_map * 255.0, 0, 255).astype(np.uint8)
             heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
             heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-               #st.write("### Probability Heatmap")
             st.image(heatmap, use_column_width=True)
   
 
