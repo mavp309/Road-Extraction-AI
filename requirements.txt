@@ -7,3 +7,5 @@ torchvision
 opencv-python
 osmnx
 segmentation_models_pytorch
+matplotlib
+scipy
