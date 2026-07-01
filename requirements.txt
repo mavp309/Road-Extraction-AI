@@ -9,3 +9,6 @@ osmnx
 segmentation_models_pytorch
 matplotlib
 scipy
+plotly
+pytest
+scikit-image
