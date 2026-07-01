@@ -9,6 +9,7 @@ from frontend.state import init_session_state
 from frontend.sidebar import render_sidebar
 from mlops.model_inference import RoadSegmenter
 from graphs.graph import build_graph_from_saved_mask
+from graphs.dashboard import create_dashboard
 from graphs.heal import heal_topological_gaps
 from graphs.simulation import (
     build_flood_metrics,
@@ -80,23 +81,9 @@ def save_mask_image(mask_image, path):
     return str(path)
 
 
-def plot_graph_preview(G, title="Graph"):
-    fig, ax = plt.subplots(figsize=(6, 6))
-    pos = {n: (data["x"], data["y"]) for n, data in G.nodes(data=True)}
-    nx.draw(
-        G,
-        pos=pos,
-        node_size=2,
-        edge_color="#66ff66",
-        width=0.5,
-        alpha=0.6,
-        ax=ax,
-        linewidths=0,
-    )
-    ax.set_facecolor("#111111")
-    ax.set_title(title, color="white")
-    ax.axis("off")
-    fig.tight_layout()
+def plot_graph_preview(G, title="Graph", image=None):
+    fig = create_dashboard(G, image=image)
+    fig.update_layout(title=title, title_x=0.5)
     return fig
 
 
@@ -190,8 +177,8 @@ def render_graph_construction_tab():
         st.metric("Edges", len(G_mask.edges()))
 
     with col_viz:
-        fig = plot_graph_preview(G_mask, title="Mask Graph")
-        st.pyplot(fig)
+        fig = plot_graph_preview(G_mask, title="Mask Graph", image=st.session_state.get("image"))
+        st.plotly_chart(fig, use_container_width=True)
         st.write(
             "Large graphs may take a moment to render. If the preview is slow, "
             "try zooming or use the node/edge summary values above."
@@ -228,8 +215,8 @@ def render_healing_tab():
         st.metric("Edges", len(G_healed.edges()))
 
     with col_viz:
-        fig = plot_graph_preview(G_healed, title="Healed Graph")
-        st.pyplot(fig)
+        fig = plot_graph_preview(G_healed, title="Healed Graph", image=st.session_state.get("image"))
+        st.plotly_chart(fig, use_container_width=True)
         st.write(
             "Large healed graphs may take a moment to render. "
             "Use the summary metrics above to verify topology improvements."
@@ -284,28 +271,25 @@ def render_simulation_tab():
         result = st.session_state["flood_result"]
         metrics = st.session_state["flood_metrics"]
         choke_points = st.session_state["choke_points"]
-        pos = get_node_positions(graph)
 
         flooded_nodes = set(result["flooded_nodes"])
         flooded_edges = set(result["flooded_edges"])
+        healed_edges = {
+            tuple(sorted((u, v))) for u, v, data in graph.edges(data=True) if data.get("healed")
+        }
+        choke_nodes = [node for node, _ in choke_points or []]
 
-        fig, ax = plt.subplots(figsize=(7, 7))
-        nx.draw_networkx_edges(graph, pos, edge_color="#4b5563", width=0.8, alpha=0.6, ax=ax)
-        nx.draw_networkx_edges(
+        fig = create_dashboard(
             graph,
-            pos,
-            edgelist=[(u, v) for (u, v) in graph.edges() if (min(u, v), max(u, v)) in flooded_edges],
-            edge_color="#ef4444",
-            width=2.2,
-            alpha=0.95,
-            ax=ax,
+            image=st.session_state.get("image"),
+            flooded_nodes=flooded_nodes,
+            flooded_edges=flooded_edges,
+            choke_nodes=choke_nodes,
+            healed_edges=healed_edges,
+            seed_nodes=set(result["flooded_nodes"][:1]),
         )
-        nx.draw_networkx_nodes(graph, pos, nodelist=list(graph.nodes()), node_color="#94a3b8", node_size=20, alpha=0.7, ax=ax)
-        nx.draw_networkx_nodes(graph, pos, nodelist=list(flooded_nodes), node_color="#ef4444", node_size=35, alpha=0.95, ax=ax)
-        ax.set_title("Flood propagation on road network", color="white")
-        ax.set_facecolor("#111827")
-        fig.tight_layout()
-        st.pyplot(fig)
+        fig.update_layout(title="Flood propagation on road network", title_x=0.5)
+        st.plotly_chart(fig, use_container_width=True)
 
         st.write("### Flood Summary")
         st.metric("Flooded nodes", metrics["flooded_nodes"])
