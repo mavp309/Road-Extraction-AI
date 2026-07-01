@@ -7,6 +7,7 @@ from pathlib import Path
 
 from frontend.state import init_session_state
 from frontend.sidebar import render_sidebar
+from frontend.sample_images import get_sample_image_paths
 from mlops.model_inference import RoadSegmenter
 from graphs.graph import build_graph_from_saved_mask
 from graphs.dashboard import create_dashboard
@@ -81,6 +82,26 @@ def save_mask_image(mask_image, path):
     return str(path)
 
 
+def create_fallback_prob_map(image_bgr):
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (9, 9), 0)
+    edges = cv2.Canny(blurred, 50, 150, apertureSize=3)
+    edge_mask = cv2.dilate(edges, np.ones((3, 3), dtype=np.uint8), iterations=2)
+
+    height, width = image_bgr.shape[:2]
+    prob_map = np.zeros((height, width), dtype=np.float32)
+    prob_map[edge_mask > 0] = 0.7
+
+    center = (width // 2, height // 2)
+    max_radius = max(20, min(width, height) // 3)
+    for angle in np.linspace(0, 2 * np.pi, 8, endpoint=False):
+        x1 = int(center[0] + np.cos(angle) * max_radius)
+        y1 = int(center[1] + np.sin(angle) * max_radius)
+        cv2.line(prob_map, center, (x1, y1), 1.0, thickness=3)
+
+    return prob_map
+
+
 def plot_graph_preview(G, title="Graph", image=None):
     fig = create_dashboard(G, image=image)
     fig.update_layout(title=title, title_x=0.5)
@@ -89,17 +110,56 @@ def plot_graph_preview(G, title="Graph", image=None):
 
 def render_inference_tab():
     st.header("Image Upload & Road Masking")
-    uploaded_file = st.file_uploader("Upload Satellite/Aerial Image", type=["jpg", "png", "jpeg"])
+    uploaded_file = st.file_uploader(
+        "Upload Satellite/Aerial Image",
+        type=["jpg", "png", "jpeg"],
+        help="Upload your own image, or choose a bundled sample below.",
+    )
+
+    sample_image_paths = get_sample_image_paths(PROJECT_ROOT)
+    selected_sample_name = None
+    if sample_image_paths:
+        sample_options = ["-- Select a sample image --"] + [path.name for path in sample_image_paths]
+        selected_sample_name = st.selectbox(
+            "Or choose a bundled sample image",
+            options=sample_options,
+            index=0,
+            help="Use a sample image if you do not want to upload your own.",
+        )
 
     if uploaded_file is not None:
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         image_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
         st.session_state["image"] = image_rgb
+    elif sample_image_paths and selected_sample_name and selected_sample_name != "-- Select a sample image --":
+        selected_sample_path = next(
+            path for path in sample_image_paths if path.name == selected_sample_name
+        )
+        image_bgr = cv2.imread(str(selected_sample_path), cv2.IMREAD_COLOR)
+        if image_bgr is None:
+            st.error(f"Could not load sample image: {selected_sample_path}")
+        else:
+            image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+            st.session_state["image"] = image_rgb
 
     if st.session_state.get("image") is None:
-        st.info("Upload an image to start.")
+        st.info("Upload an image or pick one of the bundled sample images to start.")
         return
+
+    if st.button("Run Inference", type="primary"):
+        with st.spinner("Running road segmentation..."):
+            image_bgr = cv2.cvtColor(st.session_state["image"], cv2.COLOR_RGB2BGR)
+            if segmenter is None:
+                prob_map = create_fallback_prob_map(image_bgr)
+                st.info("Model checkpoint not found; using a simple fallback mask.")
+            else:
+                prob_map = segmenter.predict(image_bgr, as_probability=True)
+
+            st.session_state["prob_map"] = prob_map.astype(np.float32)
+            st.session_state["mask_image"] = prob_map_to_mask_image(prob_map, config["threshold"])
+            st.session_state["saved_mask_path"] = None
+            st.success("Inference complete.")
 
     col1, col2, col3, col4 = st.columns(4)
     
