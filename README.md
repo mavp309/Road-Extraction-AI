@@ -38,8 +38,37 @@ If you want to run this application on your local machine instead of the Hugging
    ```
 
 ## Repository Structure
-
-- `app.py`: The main Streamlit web application.
-- `train_segmentation.py`: The PyTorch training pipeline and dataset definitions.
-- `requirements.txt`: Python dependencies (configured for CPU deployment).
-- `README.md`: Hugging Face Space configuration and documentation.
+```bash
+.
+├── app.py
+├── frontend
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── __init__.cpython-314.pyc
+│   │   ├── preprocess.cpython-314.pyc
+│   │   ├── sidebar.cpython-314.pyc
+│   │   └── state.cpython-314.pyc
+│   ├── saved_mask.png
+│   ├── sidebar.py
+│   ├── state.py
+│   └── test_ui.py
+├── graphs
+│   ├── dashboard.py
+│   ├── graph.py
+│   ├── heal.py
+│   ├── __init__.py
+│   ├── mask_processing.py
+│   ├── simulation.py
+│   ├── topology.py
+│   └── visualise.py
+├── mlops
+│   ├── __init__.py
+│   ├── model_inference.py
+│   ├── models
+│   │   └── best_model.pth
+│   └── __pycache__
+│       ├── __init__.cpython-314.pyc
+│       └── model_inference.cpython-314.pyc
+├── README.md
+└── requirements.txt
+```
