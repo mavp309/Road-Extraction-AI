@@ -24,14 +24,13 @@ This is a deep learning application deployed on Hugging Face Spaces that perform
 If you want to run this application on your local machine instead of the Hugging Face server, follow these steps:
 
 1. Clone this repository to your local machine.
-2. Ensure you have your model weights (`road_segmentation_unet.pth`) placed in the root directory.
-3. Install the required dependencies:
+2. Install the required dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Boot up the Streamlit interface:
+3. Boot up the Streamlit interface:
 
    ```bash
    streamlit run app.py
