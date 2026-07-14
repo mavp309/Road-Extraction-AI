@@ -18,7 +18,7 @@ This is a deep learning application deployed on Hugging Face Spaces that perform
 - **Encoder:** ResNet-34 (Pre-trained on ImageNet)
 - **Framework:** PyTorch & `segmentation_models_pytorch`
 - **Augmentations:** Features custom occlusion simulation using `Albumentations` (CoarseDropout) to improve robustness against real-world interference.
-
+### Deployed on https://huggingface.co/spaces/mavp309/Road-Extraction-AI
 ## Running Locally
 
 If you want to run this application on your local machine instead of the Hugging Face server, follow these steps:
