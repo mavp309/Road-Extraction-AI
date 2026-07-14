@@ -298,6 +298,17 @@ def render_simulation_tab():
             with st.spinner("Simulating flood propagation..."):
                 try:
                     seed_nodes = [int(item.strip()) for item in seed_nodes_input.split(",") if item.strip()]
+                    if not seed_nodes:
+                        st.error('Please enter atleast one seed node ID')
+                        return
+                    invalid_nodes=[n for n in seed_nodes if n not in graph.nodes()]
+                    if invalid_nodes:
+                        suggested_node= list(graph.nodes())[0] if len(graph.nodes())>0 else "None"
+                        st.error(
+                            f"Node(s) {invalid_nodes} do not exist in the current graph. "
+                            f"Please use a valid node ID (e.g., try node: {suggested_node})."
+                        )
+                        return
                 except ValueError:
                     st.error("Seed nodes must be integers separated by commas.")
                     return
@@ -359,9 +370,9 @@ def render_simulation_tab():
             st.info("No choke points detected.")
 
 
-tab1, tab2, tab3, tab4 = st.tabs(["1. Inference", "2. Graph Construction", "3. Topology Healing", "4. Flood Simulation"])
+tab1, tab2, tab3, tab4 = st.tabs(["1.Inference", "2.Graph Construction", "3.Topology Healing", "4.Flood Simulation"])
 
-with tab1:
+with tab1:                                
     render_inference_tab()
 
 with tab2:
